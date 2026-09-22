@@ -47,7 +47,8 @@ it passes every check below, until `--limit` papers (default 500) are kept:
 
 Outputs (written to `--out-dir`, default `corpus/`):
   - `abstracts.md`: one section per paper with title, authors, venue, year,
-    citation count and abstract, under a header recording this provenance and
+    citation count and abstract (inline JATS/HTML tags stripped, whitespace
+    collapsed), under a header recording this provenance and
     the date the pull was run.
   - `manifest.csv`: one row per paper with rank, Semantic Scholar paper ID, DOI,
     arXiv ID, title, authors, year, venue, citation count, open-access status
@@ -97,6 +98,8 @@ MAX_RETRIES = 8
 REQUEST_TIMEOUT_SECONDS = 120
 
 ROBOT_TERM = re.compile(r"\brobot", re.IGNORECASE)
+# JATS/HTML inline markup some publishers leave in abstracts, e.g. <italic>, <jats:p>.
+MARKUP_TAG = re.compile(r"</?(?:(?:jats|mml):[\w.-]+(?:\s[^<>]*)?|[a-z][a-z0-9-]*)/?>")
 ARXIV_URL = re.compile(
     r"arxiv\.org/(?:abs|pdf)/([^/?#]+?)(?:v\d+)?(?:\.pdf)?(?:[?#]|$)", re.IGNORECASE
 )
@@ -220,7 +223,7 @@ def arxiv_id(paper: dict) -> str:
 
 def is_open_access(paper: dict) -> bool:
     pdf = paper.get("openAccessPdf") or {}
-    if not pdf.get("url") or not clean(paper.get("abstract")):
+    if not pdf.get("url") or not clean_abstract(paper.get("abstract")):
         return False
     return pdf.get("status") != "CLOSED" or bool(arxiv_id(paper))
 
@@ -266,6 +269,11 @@ def select_papers(candidates: Iterable[dict], limit: int) -> list[dict]:
 def clean(text: str | None) -> str:
     """Collapse whitespace so fetched text cannot break the markdown structure."""
     return re.sub(r"\s+", " ", text or "").strip()
+
+
+def clean_abstract(text: str | None) -> str:
+    """Strip inline markup tags, keeping their text, then collapse whitespace."""
+    return clean(MARKUP_TAG.sub("", text or ""))
 
 
 def display_venue(paper: dict) -> str:
@@ -322,7 +330,7 @@ def render_markdown(
             f"- Citations: {paper.get('citationCount') or 0}",
             f"- Open access: {open_access_url(paper)}",
             "",
-            clean(paper["abstract"]),
+            clean_abstract(paper["abstract"]),
             "",
         ]
     return "\n".join(lines)

@@ -79,6 +79,21 @@ class OpenAccessTest(unittest.TestCase):
         )
 
 
+class CleanAbstractTest(unittest.TestCase):
+    def test_strips_inline_markup_and_keeps_text(self):
+        raw = "<jats:p>A <italic>robust</italic> solver,\n<monospace>GNC</monospace>.</jats:p>"
+        self.assertEqual(fetch.clean_abstract(raw), "A robust solver, GNC.")
+
+    def test_keeps_comparisons_that_are_not_tags(self):
+        self.assertEqual(
+            fetch.clean_abstract("error < 5 and x <y and z> w"),
+            "error < 5 and x <y and z> w",
+        )
+
+    def test_markup_only_abstract_counts_as_missing(self):
+        self.assertFalse(fetch.is_open_access(paper(abstract="<jats:p> </jats:p>")))
+
+
 class ArxivIdTest(unittest.TestCase):
     def test_prefers_external_id(self):
         self.assertEqual(
