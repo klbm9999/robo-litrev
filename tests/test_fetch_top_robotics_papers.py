@@ -84,6 +84,12 @@ class CleanAbstractTest(unittest.TestCase):
         raw = "<jats:p>A <italic>robust</italic> solver,\n<monospace>GNC</monospace>.</jats:p>"
         self.assertEqual(fetch.clean_abstract(raw), "A robust solver, GNC.")
 
+    def test_strips_tags_with_quoted_attributes(self):
+        raw = 'This presents <tex-math notation="LaTeX">$ \\mathsf{{Kimera}} $, a system.'
+        self.assertEqual(
+            fetch.clean_abstract(raw), "This presents $ \\mathsf{{Kimera}} $, a system."
+        )
+
     def test_keeps_comparisons_that_are_not_tags(self):
         self.assertEqual(
             fetch.clean_abstract("error < 5 and x <y and z> w"),
@@ -222,6 +228,12 @@ class SelectPapersTest(unittest.TestCase):
         ]
         selected = fetch.select_papers(candidates, 2)
         self.assertEqual([p["paperId"] for p in selected], ["1", "5"])
+
+    def test_skips_excluded_paper_ids(self):
+        excluded = next(iter(fetch.EXCLUDED_PAPER_IDS))
+        candidates = [paper(paperId=excluded, title="Robot A"), paper(paperId="2")]
+        selected = fetch.select_papers(candidates, 2)
+        self.assertEqual([p["paperId"] for p in selected], ["2"])
 
     def test_stops_consuming_candidates_at_limit(self):
         consumed = []

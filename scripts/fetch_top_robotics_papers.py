@@ -44,6 +44,10 @@ it passes every check below, until `--limit` papers (default 500) are kept:
   3. Deduplication: preprint and published versions that Semantic Scholar keeps
      as separate records are merged by normalised title; the higher-cited record
      wins (it always comes first because results are citation sorted).
+  4. Exclusion list: a few records pass the checks above yet are not real
+     robotics papers (a corrupted Semantic Scholar record, a business paper
+     that only lists robotics among digital technologies); they are skipped
+     by paper ID, each with its reason, in `EXCLUDED_PAPER_IDS`.
 
 Outputs (written to `--out-dir`, default `corpus/`):
   - `abstracts.md`: one section per paper with title, authors, venue, year,
@@ -98,8 +102,13 @@ MAX_RETRIES = 8
 REQUEST_TIMEOUT_SECONDS = 120
 
 ROBOT_TERM = re.compile(r"\brobot", re.IGNORECASE)
-# JATS/HTML inline markup some publishers leave in abstracts, e.g. <italic>, <jats:p>.
-MARKUP_TAG = re.compile(r"</?(?:(?:jats|mml):[\w.-]+(?:\s[^<>]*)?|[a-z][a-z0-9-]*)/?>")
+# JATS/HTML inline markup some publishers leave in abstracts, e.g. <italic>, <jats:p>,
+# <tex-math notation="LaTeX">. Plain tags only count as markup when any attributes
+# are quoted name="value" pairs, so comparisons such as "x <y and z> w" survive.
+MARKUP_TAG = re.compile(
+    r"</?(?:(?:jats|mml):[\w.-]+(?:\s[^<>]*)?"
+    r"|[a-z][a-z0-9-]*(?:\s+[\w:.-]+\s*=\s*(?:\"[^\"]*\"|'[^']*'))*\s*)/?>"
+)
 ARXIV_URL = re.compile(
     r"arxiv\.org/(?:abs|pdf)/([^/?#]+?)(?:v\d+)?(?:\.pdf)?(?:[?#]|$)", re.IGNORECASE
 )
@@ -129,6 +138,16 @@ TECHNICAL_FIELDS = {
     "Materials Science",
     "Physics",
     "Mathematics",
+}
+
+# Records that pass the automatic checks but are not real robotics papers.
+EXCLUDED_PAPER_IDS = {
+    # Corrupted record: title "Automation", an IUPAC DOI, a BIM welding-cell
+    # abstract and "AWS Certified Advanced Networking" as its venue.
+    "47d6c7e795f3d7703731c286338590758e82d021",
+    # "Digital Transformation Process and SMEs": business paper that mentions
+    # robotics only in a list of digital technologies.
+    "7284d6fb56b7f2a732962ddbc4b798990f31e8bf",
 }
 
 MANIFEST_COLUMNS = [
@@ -252,6 +271,7 @@ def select_papers(candidates: Iterable[dict], limit: int) -> list[dict]:
     for paper in candidates:
         if (
             not paper.get("title")
+            or paper.get("paperId") in EXCLUDED_PAPER_IDS
             or not is_open_access(paper)
             or not is_robotics(paper)
         ):
@@ -313,6 +333,7 @@ def render_markdown(
         "- Open access only: a paper is kept only if Semantic Scholar lists an open-access PDF for it that is an arXiv copy or has an open-access status other than CLOSED, and serves its abstract; paywalled papers and withheld abstracts are skipped.",
         "- Robotics relevance: kept if published in a robotics venue (ICRA, IROS, RSS, CoRL, RA-L, T-RO, IJRR, Humanoids, or any venue named after robotics); otherwise dropped if tagged with a social-science or business field; otherwise kept if the title mentions a robot term (excluding robotic process automation) and the paper is tagged with a technical field, or if the abstract mentions a robot term at least twice and the paper is tagged Computer Science.",
         "- Deduplication: records with the same normalised title are merged, keeping the higher-cited one.",
+        f"- Exclusions: {len(EXCLUDED_PAPER_IDS)} records that pass these checks but are not real robotics papers (a corrupted Semantic Scholar record, a business paper) are skipped by paper ID; the script lists each with its reason.",
         f"- Selection: the top {limit} papers passing these checks, in descending citation order.",
         f"- Citation counts are a snapshot as of {pulled_on}.",
         "- `manifest.csv` next to this file lists every paper with its Semantic Scholar ID, DOI, arXiv ID and open-access link.",
